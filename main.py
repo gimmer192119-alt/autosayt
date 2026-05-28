@@ -531,9 +531,9 @@ async def main():
     print("🤖 Бот запущен...")
     logger.info("Бот запущен и ожидает команды")
     
-    # Запускаем бота
-    await application.run_polling(allowed_updates=Update.ALL_TYPES)
+    # Запускаем бота с правильными параметрами для Python 3.13+
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
