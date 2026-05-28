@@ -23,8 +23,8 @@ logger = logging.getLogger(__name__)
 # Константы
 ARTILLECT_REGISTER_URL = "https://app.artillect.pro/api/auth/register/"
 ARTILLECT_VERIFY_URL = "https://app.artillect.pro/api/auth/verify-email"
-TEMPAMAIL_RANDOM_URL = "https://api.tempamail.com/webapp/email/random"
-TEMPAMAIL_MESSAGES_URL = "https://api.tempamail.com/webapp/messages"
+# Используем 1secmail API (бесплатный, не требует авторизации)
+MAIL_API_BASE = "https://www.1secmail.com/api/v1/"
 
 REFERRAL_CODE = "B3B7C1C4"
 
@@ -120,40 +120,69 @@ class AccountCreator:
         return ''.join(password)
     
     def create_temp_email(self) -> Optional[Dict[str, Any]]:
-        """Создание временной почты"""
+        """Создание временной почты через 1secmail"""
         try:
-            # Генерируем UUID для сессии
-            uuid_val = str(uuid.uuid4())
+            # Генерируем случайный логин
+            login = ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))
             
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:151.0) Gecko/20100101 Firefox/151.0",
-                "Accept": "*/*",
-                "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Origin": "https://tempamail.com",
-                "Connection": "keep-alive",
-            }
-            
-            data = {"uuid": uuid_val}
-            
-            response = self.session.post(TEMPAMAIL_RANDOM_URL, headers=headers, data=data)
+            # Получаем список доступных доменов
+            response = self.session.get(f"{MAIL_API_BASE}?action=getDomainList")
             response.raise_for_status()
+            domains = response.json()
             
-            result = response.json()
+            if not domains:
+                logger.error("Не удалось получить список доменов")
+                return None
             
-            # Сохраняем UUID для последующих запросов
+            domain = random.choice(domains)
+            email = f"{login}@{domain}"
+            
             email_data = {
-                "uuid": uuid,
-                "email": result.get("email", ""),
-                "email_id": result.get("id", "")
+                "login": login,
+                "domain": domain,
+                "email": email
             }
             
-            logger.info(f"Создана временная почта: {email_data['email']}")
+            logger.info(f"Создана временная почта: {email}")
             return email_data
             
         except Exception as e:
             logger.error(f"Ошибка создания временной почты: {e}")
             return None
+    
+    def get_messages(self, login: str, domain: str) -> list:
+        """Получение списка сообщений для почты"""
+        try:
+            response = self.session.get(
+                f"{MAIL_API_BASE}?action=getMessages&login={login}&domain={domain}"
+            )
+            response.raise_for_status()
+            messages = response.json()
+            return messages if messages else []
+        except Exception as e:
+            logger.error(f"Ошибка получения сообщений: {e}")
+            return []
+    
+    def read_message(self, login: str, domain: str, msg_id: int) -> Optional[Dict]:
+        """Чтение конкретного сообщения"""
+        try:
+            response = self.session.get(
+                f"{MAIL_API_BASE}?action=readMessage&login={login}&domain={domain}&id={msg_id}"
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f"Ошибка чтения сообщения: {e}")
+            return None
+    
+    def extract_verification_link(self, html_content: str) -> Optional[str]:
+        """Извлечение ссылки подтверждения из HTML письма"""
+        # Ищем ссылку вида https://app.artillect.pro/api/auth/verify-email?token=...
+        pattern = r'https://app\.artillect\.pro/api/auth/verify-email\?token=[a-f0-9\-]+'
+        match = re.search(pattern, html_content)
+        if match:
+            return match.group(0)
+        return None
     
     def register_account(self, email: str, password: str, name: str) -> bool:
         """Регистрация аккаунта на Artillect"""
@@ -199,59 +228,6 @@ class AccountCreator:
         except Exception as e:
             logger.error(f"Ошибка регистрации: {e}")
             return False
-    
-    def get_messages(self, uuid: str, email_id: str, known_message_id: int = 0) -> list:
-        """Получение сообщений из временной почты"""
-        try:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:151.0) Gecko/20100101 Firefox/151.0",
-                "Accept": "*/*",
-                "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Origin": "https://tempamail.com",
-                "Connection": "keep-alive",
-            }
-            
-            data = {
-                "uuid": uuid,
-                "selected_email_id": email_id,
-                "known_message_id": str(known_message_id)
-            }
-            
-            response = self.session.post(TEMPAMAIL_MESSAGES_URL, headers=headers, data=data)
-            response.raise_for_status()
-            
-            result = response.json()
-            messages = result.get("messages", [])
-            
-            logger.info(f"Получено сообщений: {len(messages)}")
-            return messages
-            
-        except Exception as e:
-            logger.error(f"Ошибка получения сообщений: {e}")
-            return []
-    
-    def extract_verification_link(self, message_body: str) -> Optional[str]:
-        """Извлечение ссылки подтверждения из письма"""
-        # Ищем ссылку вида https://app.artillect.pro/api/auth/verify-email?token=...
-        pattern = r'https://app\.artillect\.pro/api/auth/verify-email\?token=[a-f0-9\-]+'
-        match = re.search(pattern, message_body)
-        
-        if match:
-            link = match.group(0)
-            logger.info(f"Найдена ссылка подтверждения: {link}")
-            return link
-        
-        # Также ищем просто токен
-        token_pattern = r'token=([a-f0-9\-]+)'
-        token_match = re.search(token_pattern, message_body)
-        
-        if token_match:
-            token = token_match.group(1)
-            link = f"{ARTILLECT_VERIFY_URL}?token={token}"
-            logger.info(f"Найден токен, сформирована ссылка: {link}")
-            return link
-        
         return None
     
     def verify_email(self, verification_link: str) -> bool:
@@ -315,6 +291,8 @@ class AccountCreator:
             return result
         
         result["email"] = email_data["email"]
+        login = email_data.get("login", "")
+        domain = email_data.get("domain", "")
         
         # Шаг 2: Генерация данных аккаунта
         name = self.generate_random_name()
@@ -349,24 +327,19 @@ class AccountCreator:
             attempt += 1
             await asyncio.sleep(10)  # Ждем 10 секунд между проверками
             
-            messages = self.get_messages(
-                email_data["uuid"],
-                str(email_data["email_id"]),
-                known_message_id=0
-            )
+            messages = self.get_messages(login, domain)
             
             for message in messages:
-                # Получаем содержимое письма
-                body = message.get("body", "") or message.get("text", "") or message.get("content", "")
+                msg_id = message.get("id", 0)
                 
-                # Если body пустой, пробуем получить полное сообщение (если есть ID)
-                if not body and message.get("id"):
-                    # В некоторых API нужно делать дополнительный запрос для получения полного текста
-                    pass
-                
-                verification_link = self.extract_verification_link(body)
-                if verification_link:
-                    break
+                # Читаем полное сообщение
+                full_message = self.read_message(login, domain, msg_id)
+                if full_message:
+                    body = full_message.get("body", "") or full_message.get("text", "")
+                    
+                    verification_link = self.extract_verification_link(body)
+                    if verification_link:
+                        break
             
             if verification_link:
                 break
