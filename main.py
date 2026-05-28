@@ -4,6 +4,7 @@ import random
 import string
 import re
 import logging
+import os
 from datetime import datetime
 from typing import Optional, Dict, Any
 
@@ -25,6 +26,37 @@ TEMPAMAIL_RANDOM_URL = "https://api.tempamail.com/webapp/email/random"
 TEMPAMAIL_MESSAGES_URL = "https://api.tempamail.com/webapp/messages"
 
 REFERRAL_CODE = "B3B7C1C4"
+
+# Загрузка конфигурации
+def load_config() -> dict:
+    """Загрузка конфигурации из config.json"""
+    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+    
+    if not os.path.exists(config_path):
+        logger.error("Файл config.json не найден! Создайте его по шаблону.")
+        return None
+    
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        
+        if not config.get('telegram_bot_token') or config['telegram_bot_token'] == 'ВАШ_ТОКЕН_БОТА':
+            logger.error("Укажите ваш токен бота в config.json")
+            return None
+        
+        if not config.get('telegram_chat_id') or config['telegram_chat_id'] == 'ВАШ_CHAT_ID':
+            logger.error("Укажите ваш Chat ID в config.json")
+            return None
+        
+        logger.info("Конфигурация успешно загружена")
+        return config
+    
+    except json.JSONDecodeError as e:
+        logger.error(f"Ошибка чтения config.json: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Ошибка загрузки конфигурации: {e}")
+        return None
 
 # Словари для генерации имен
 FIRST_NAMES = ["Alex", "Max", "John", "Mike", "Dmitry", "Ivan", "Peter", "Anna", "Maria", "Elena", "Olga", "Kate"]
@@ -505,15 +537,27 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     """Основная функция"""
-    import sys
+    # Загружаем конфигурацию из файла
+    config = load_config()
     
-    if len(sys.argv) < 3:
-        print("Использование: python main.py <BOT_TOKEN> <CHAT_ID>")
-        print("Пример: python main.py 123456:ABCdefGHIjklMNOpqrsTUVwxyz 987654321")
-        sys.exit(1)
+    if not config:
+        print("\n❌ Ошибка: Не удалось загрузить конфигурацию!")
+        print("\n📝 Инструкция:")
+        print("1. Откройте файл config.json")
+        print("2. Замените 'ВАШ_ТОКЕН_БОТА' на токен вашего Telegram бота")
+        print("3. Замените 'ВАШ_CHAT_ID' на ваш числовой Chat ID")
+        print("\nПример config.json:")
+        print('{')
+        print('    "telegram_bot_token": "123456:ABCdefGHIjklMNOpqrsTUVwxyz",')
+        print('    "telegram_chat_id": 987654321')
+        print('}')
+        print("\nКак получить Chat ID:")
+        print("- Напишите боту @userinfobot в Telegram")
+        print("- Или отправьте сообщение созданному боту и используйте код get_id.py")
+        return
     
-    bot_token = sys.argv[1]
-    chat_id = int(sys.argv[2])
+    bot_token = config['telegram_bot_token']
+    chat_id = int(config['telegram_chat_id'])
     
     global creator
     creator = AccountCreator(bot_token, chat_id)
