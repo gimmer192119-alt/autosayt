@@ -1,0 +1,4 @@
+httpx
+python-telegram-bot[job-queue]
+pyTelegramBotAPI
+requests
