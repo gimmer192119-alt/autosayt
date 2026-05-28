@@ -380,13 +380,13 @@ is_running = False
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /start"""
     await update.message.reply_text(
-        "🤖 <b>Бот для автоматической регистрации аккаунтов Artillect</b>\n\n"
+        "🤖 Бот для автоматической регистрации аккаунтов Artillect\n\n"
         "Доступные команды:\n"
         "/register - Создать один аккаунт\n"
         "/start_auto <минуты> - Запустить авто-регистрацию каждые N минут\n"
         "/stop_auto - Остановить авто-регистрацию\n"
         "/status - Показать текущий статус",
-        parse_mode='HTML'
+        parse_mode=None
     )
 
 
