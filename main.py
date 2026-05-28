@@ -5,6 +5,7 @@ import string
 import re
 import logging
 import os
+import uuid
 from datetime import datetime
 from typing import Optional, Dict, Any
 
@@ -122,7 +123,7 @@ class AccountCreator:
         """Создание временной почты"""
         try:
             # Генерируем UUID для сессии
-            uuid = f"{random.uuid4()}"
+            uuid_val = str(uuid.uuid4())
             
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:151.0) Gecko/20100101 Firefox/151.0",
@@ -133,7 +134,7 @@ class AccountCreator:
                 "Connection": "keep-alive",
             }
             
-            data = {"uuid": uuid}
+            data = {"uuid": uuid_val}
             
             response = self.session.post(TEMPAMAIL_RANDOM_URL, headers=headers, data=data)
             response.raise_for_status()
@@ -175,7 +176,7 @@ class AccountCreator:
             cookies = {
                 "_ym_uid": str(random.randint(1000000000000000000, 9999999999999999999)),
                 "_ym_d": str(int(datetime.now().timestamp())),
-                "cid": f"{random.uuid4()}",
+                "cid": str(uuid.uuid4()),
             }
             
             response = self.session.post(
