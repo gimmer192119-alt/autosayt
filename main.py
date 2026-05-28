@@ -503,7 +503,7 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def main():
+def main():
     """Основная функция"""
     import sys
     
@@ -531,7 +531,7 @@ async def main():
     print("🤖 Бот запущен...")
     logger.info("Бот запущен и ожидает команды")
     
-    # Запускаем бота с правильными параметрами для Python 3.13+
+    # Запускаем бота (синхронный вызов для Python 3.13+)
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
