@@ -8,6 +8,7 @@ import os
 import uuid
 from datetime import datetime
 from typing import Optional, Dict, Any
+from urllib.parse import urlparse
 
 import requests
 from telegram import Update, Bot
@@ -27,6 +28,50 @@ ARTILLECT_VERIFY_URL = "https://app.artillect.pro/api/auth/verify-email"
 MAIL_API_BASE = "https://www.1secmail.com/api/v1/"
 
 REFERRAL_CODE = "B3B7C1C4"
+
+
+def get_system_proxy() -> Optional[str]:
+    """Получение системного прокси из переменных окружения"""
+    # Проверяем различные варианты переменных окружения для прокси
+    proxy_vars = ['https_proxy', 'http_proxy', 'all_proxy', 'HTTPS_PROXY', 'HTTP_PROXY', 'ALL_PROXY']
+    
+    for var in proxy_vars:
+        proxy_url = os.environ.get(var)
+        if proxy_url:
+            logger.info(f"Найден прокси в переменной {var}: {proxy_url}")
+            return proxy_url
+    
+    # Также проверяем реестр Windows (для Windows)
+    if os.name == 'nt':
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Microsoft\Windows\CurrentVersion\Internet Settings') as key:
+                proxy_enable = winreg.QueryValueEx(key, 'ProxyEnable')[0]
+                if proxy_enable:
+                    proxy_server = winreg.QueryValueEx(key, 'ProxyServer')[0]
+                    proxy_url = f"http://{proxy_server}"
+                    logger.info(f"Найден прокси в реестре Windows: {proxy_url}")
+                    return proxy_url
+        except Exception as e:
+            logger.debug(f"Не удалось получить прокси из реестра: {e}")
+    
+    return None
+
+
+def create_session_with_proxy(proxy_url: Optional[str] = None) -> requests.Session:
+    """Создание сессии requests с прокси"""
+    session = requests.Session()
+    
+    if proxy_url:
+        proxies = {
+            'http': proxy_url,
+            'https': proxy_url
+        }
+        session.proxies.update(proxies)
+        logger.info(f"Сессия настроена на использование прокси: {proxy_url}")
+    
+    return session
+
 
 # Загрузка конфигурации
 def load_config() -> dict:
@@ -65,10 +110,11 @@ LAST_NAMES = ["Smith", "Johnson", "Brown", "Wilson", "Davis", "Miller", "Anderso
 
 
 class AccountCreator:
-    def __init__(self, telegram_bot_token: str, telegram_chat_id: int):
+    def __init__(self, telegram_bot_token: str, telegram_chat_id: int, proxy_url: Optional[str] = None):
         self.bot_token = telegram_bot_token
         self.chat_id = telegram_chat_id
-        self.session = requests.Session()
+        self.proxy_url = proxy_url
+        self.session = create_session_with_proxy(proxy_url)
         self._setup_session()
     
     def _setup_session(self):
@@ -533,11 +579,17 @@ def main():
     bot_token = config['telegram_bot_token']
     chat_id = int(config['telegram_chat_id'])
     
-    global creator
-    creator = AccountCreator(bot_token, chat_id)
+    # Получаем прокси (из конфига или системный)
+    proxy_url = config.get('proxy_url') or get_system_proxy()
     
-    # Создаем приложение Telegram
-    application = Application.builder().token(bot_token).build()
+    global creator
+    creator = AccountCreator(bot_token, chat_id, proxy_url)
+    
+    # Создаем приложение Telegram с прокси
+    application_builder = Application.builder().token(bot_token)
+    if proxy_url:
+        application_builder = application_builder.proxy_url(proxy_url)
+    application = application_builder.build()
     
     # Добавляем обработчики команд
     application.add_handler(CommandHandler("start", start_command))
@@ -545,6 +597,11 @@ def main():
     application.add_handler(CommandHandler("start_auto", start_auto_command))
     application.add_handler(CommandHandler("stop_auto", stop_auto_command))
     application.add_handler(CommandHandler("status", status_command))
+    
+    if proxy_url:
+        logger.info(f"Бот использует прокси: {proxy_url}")
+    else:
+        logger.info("Бот работает без прокси")
     
     print("🤖 Бот запущен...")
     logger.info("Бот запущен и ожидает команды")
